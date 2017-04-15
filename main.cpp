@@ -77,7 +77,7 @@ int main()
   	s_Builder.CreateRet(s_Builder.getInt32(0));
 
 /////////////////////////////////////////////////////////////////////////////
-	llvm::InitializeAllTargetInfos();
+	/*llvm::InitializeAllTargetInfos();
 	llvm::InitializeAllTargets();
 	llvm::InitializeAllTargetMCs();
 	llvm::InitializeAllAsmParsers();
@@ -114,7 +114,12 @@ int main()
 	}
 	pass.run(*s_Module);
 	dest.flush();
-	std::cout << "Wrote " << Filename << "\n";
+	std::cout << "Wrote " << Filename << "\n";*/
+
+	std::error_code err_code;
+	llvm::raw_fd_ostream output("output.ll", err_code, llvm::sys::fs::F_None);
+
+	s_Module->print(output, nullptr);
 
 	std::clog << "[LOG] Finished\n";
 	return 0;
