@@ -4,7 +4,7 @@
 
 int main()
 {
-    llvm::Value act;
+    llvm::Value* act;
     
     std::cout << "is this actually happening?\n";
     return 0;
