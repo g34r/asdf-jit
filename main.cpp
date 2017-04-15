@@ -55,6 +55,16 @@ int main()
 	s_Builder.CreateStore(data_ptr, data);
 	s_Builder.CreateStore(data_ptr, ptr);
 
+	llvm::Function* funcPutChar = llvm::cast<llvm::Function>(
+			s_Module->getOrInsertFunction("putchar",
+				s_Builder.getInt32Ty(),
+				s_Builder.getInt32Ty(),
+				nullptr));
+	s_Builder.CreateCall(
+			funcPutChar,
+			{s_Builder.getInt32(65)}
+			);
+
 	std::clog << "[LOG] Getting standard free function...\n";
 	llvm::Function* free_func = llvm::cast<llvm::Function>(
       	s_Module->getOrInsertFunction("free", s_Builder.getVoidTy(), s_Builder.getInt8PtrTy(),
