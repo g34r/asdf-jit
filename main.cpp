@@ -1,8 +1,16 @@
 #include <iostream>
 
+#include "llvm/ADT/Optional.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
 
 static llvm::LLVMContext s_Context;
 static llvm::IRBuilder<> s_Builder(s_Context);
@@ -46,6 +54,57 @@ int main()
 	std::clog << "[LOG] Storing to data and pointer...\n";
 	s_Builder.CreateStore(data_ptr, data);
 	s_Builder.CreateStore(data_ptr, ptr);
+
+	std::clog << "[LOG] Getting standard free function...\n";
+	llvm::Function* free_func = llvm::cast<llvm::Function>(
+      	s_Module->getOrInsertFunction("free", s_Builder.getVoidTy(), s_Builder.getInt8PtrTy(),
+        nullptr));
+
+	std::clog << "[LOG] Free-ing allocated data...\n";
+  	s_Builder.CreateCall(free_func, {s_Builder.CreateLoad(data)});
+
+	std::clog << "[LOG] Returning zero from main entry function...\n";
+  	s_Builder.CreateRet(s_Builder.getInt32(0));
+
+/////////////////////////////////////////////////////////////////////////////
+	llvm::InitializeAllTargetInfos();
+	llvm::InitializeAllTargets();
+	llvm::InitializeAllTargetMCs();
+	llvm::InitializeAllAsmParsers();
+	llvm::InitializeAllAsmPrinters();
+
+	std::string TargetTriple = llvm::sys::getDefaultTargetTriple();
+
+	std::string err;
+	const llvm::Target* Target = llvm::TargetRegistry::lookupTarget(TargetTriple, err);
+	if (!Target) {
+		std::cerr << "Failed to lookup target " + TargetTriple + ": " + err;
+		return 1;
+	}
+
+	llvm::TargetOptions opt;
+	auto RM = llvm::Optional<llvm::Reloc::Model>();
+	llvm::TargetMachine* TheTargetMachine = Target->createTargetMachine(TargetTriple, "generic", "", opt, RM.getValueOr(llvm::Reloc::Model()));
+
+	s_Module->setTargetTriple(TargetTriple);
+	s_Module->setDataLayout(TheTargetMachine->createDataLayout());
+
+	std::string Filename = "output.o";
+	std::error_code err_code;
+	llvm::raw_fd_ostream dest(Filename, err_code, llvm::sys::fs::F_None);
+	if (err_code) {
+		std::cerr << "Could not open file: " << err_code.message();
+		return 1;
+	}
+
+	llvm::legacy::PassManager pass;
+	if (TheTargetMachine->addPassesToEmitFile(pass, dest, llvm::TargetMachine::CGFT_ObjectFile)) {
+		std::cerr << "TheTargetMachine can't emit a file of this type\n";
+		return 1;
+	}
+	pass.run(*s_Module);
+	dest.flush();
+	std::cout << "Wrote " << Filename << "\n";
 
 	std::clog << "[LOG] Finished\n";
 	return 0;
