@@ -52,7 +52,7 @@ int main(int argc, char** argv)
 	std::clog << "[LOG] Declaring data and pointer...\n";
 	llvm::Value* data = s_Builder.CreateAlloca(s_Builder.getInt8PtrTy(), nullptr, "data");
 	llvm::Value* ptr = s_Builder.CreateAlloca(s_Builder.getInt8PtrTy(), nullptr, "ptr");
-	llvm::Value* flag = s_Builder.CreateAlloca(s_Builder.getInt1Ty(), nullptr, "flag");
+	llvm::Value* flag = s_Builder.CreateAlloca(s_Builder.getInt1Ty(), s_Builder.getInt1(true), "flag");
 
 	std::clog << "[LOG] Getting standard calloc function...\n";
 	llvm::Function* calloc_func = llvm::cast<llvm::Function>
@@ -85,20 +85,26 @@ int main(int argc, char** argv)
 		switch(ch)
 		{
 			case 'a':
-				s_Builder.CreateStore(s_Builder.CreateNot(flag), flag);
+				s_Builder.CreateStore(s_Builder.CreateXor(s_Builder.getTrue(), s_Builder.CreateLoad(flag)), flag);
 				break;
 			case 's':
 				{
+				llvm::BasicBlock* cond = llvm::BasicBlock::Create(s_Context, "cond" + cond_num_str, main_func);
 				llvm::BasicBlock* cond_true = llvm::BasicBlock::Create(s_Context, "cond_true" + cond_num_str, main_func);
 				llvm::BasicBlock* cond_false = llvm::BasicBlock::Create(s_Context, "cond_false" + cond_num_str, main_func);
 				llvm::BasicBlock* cond_end = llvm::BasicBlock::Create(s_Context, "cond_end" + cond_num_str, main_func);
+				llvm::Value* tmp_ptr = s_Builder.CreateLoad(ptr);
 
+				s_Builder.CreateBr(cond);
+				s_Builder.SetInsertPoint(cond);
 				llvm::Value* flag_cmp = s_Builder.CreateICmpEQ(s_Builder.CreateLoad(flag), s_Builder.getInt1(true), "branch" + cond_num_str);
 				s_Builder.CreateCondBr(flag_cmp, cond_true, cond_false);
 				s_Builder.SetInsertPoint(cond_true);
 				s_Builder.CreateStore(s_Builder.CreateInBoundsGEP(s_Builder.getInt8Ty(), s_Builder.CreateLoad(ptr), s_Builder.getInt32(1)), ptr);
+				s_Builder.CreateBr(cond_end);
 				s_Builder.SetInsertPoint(cond_false);
-				s_Builder.CreateStore(s_Builder.CreateInBoundsGEP(s_Builder.getInt8Ty(), s_Builder.CreateLoad(ptr), s_Builder.getInt32(1)), ptr);
+				s_Builder.CreateStore(s_Builder.CreateInBoundsGEP(s_Builder.getInt8Ty(), s_Builder.CreateLoad(ptr), s_Builder.getInt32(-1)), ptr);
+				s_Builder.CreateBr(cond_end);
 				s_Builder.SetInsertPoint(cond_end);
 				cond_num++;
 				}
@@ -127,16 +133,22 @@ int main(int argc, char** argv)
 				break;
 			case 'f':
 				{
+				llvm::BasicBlock* cond = llvm::BasicBlock::Create(s_Context, "cond" + cond_num_str, main_func);
 				llvm::BasicBlock* cond_true = llvm::BasicBlock::Create(s_Context, "cond_true" + cond_num_str, main_func);
 				llvm::BasicBlock* cond_false = llvm::BasicBlock::Create(s_Context, "cond_false" + cond_num_str, main_func);
 				llvm::BasicBlock* cond_end = llvm::BasicBlock::Create(s_Context, "cond_end" + cond_num_str, main_func);
+				llvm::Value* tmp_ptr = s_Builder.CreateLoad(ptr);
 
+				s_Builder.CreateBr(cond);
+				s_Builder.SetInsertPoint(cond);
 				llvm::Value* flag_cmp = s_Builder.CreateICmpEQ(s_Builder.CreateLoad(flag), s_Builder.getInt1(true), "branch" + cond_num_str);
 				s_Builder.CreateCondBr(flag_cmp, cond_true, cond_false);
 				s_Builder.SetInsertPoint(cond_true);
 				s_Builder.CreateCall(putchar_func, s_Builder.CreateSExt(s_Builder.CreateLoad(s_Builder.CreateLoad(ptr)), s_Builder.getInt32Ty()));
+				s_Builder.CreateBr(cond_end);
 				s_Builder.SetInsertPoint(cond_false);
-				s_Builder.CreateCall(s_Builder.CreateTrunc(s_Builder.CreateCall(getchar_func), s_Builder.getInt8Ty()), s_Builder.CreateLoad(ptr));
+				s_Builder.CreateStore(s_Builder.CreateTrunc(s_Builder.CreateCall(getchar_func), s_Builder.getInt8Ty()), s_Builder.CreateLoad(ptr));
+				s_Builder.CreateBr(cond_end);
 				s_Builder.SetInsertPoint(cond_end);
 				cond_num++;
 				}
