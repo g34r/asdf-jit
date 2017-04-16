@@ -1,5 +1,5 @@
 CXX = clang++
-CXXFLAGS = -std=c++14 -lLLVM -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS
+CXXFLAGS = -std=c++14 -lLLVM -lboost_system -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS
 TARGET = a.out
 OBJECTS = main.o
 
