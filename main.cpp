@@ -11,13 +11,22 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 static llvm::LLVMContext s_Context;
 static llvm::IRBuilder<> s_Builder(s_Context);
 static std::unique_ptr<llvm::Module> s_Module;
 
-int main()
+int main(int argc, char** argv)
 {
+	if(argc <= 1)
+	{
+		std::cerr << "Usage : asdf <asdf-code>\n";
+		return 1;
+	}
+
+	std::string code = argv[1];
+
 	std::cout << "[asdf JIT compiler]\n";
 	std::cout << "Note that log below is not actually happening here; it's status of code generating for those behaviors.\n";
 
@@ -34,18 +43,32 @@ int main()
 		);
 
 	std::clog << "[LOG] Setting insert point...\n";
-	s_Builder.SetInsertPoint(llvm::BasicBlock::Create(s_Context, "", main_func));
+
+	auto main_block = llvm::BasicBlock::Create(s_Context, "", main_func);
+	s_Builder.SetInsertPoint(main_block);
 
 	constexpr std::size_t arr_size = 3000;
 
 	std::clog << "[LOG] Declaring data and pointer...\n";
 	llvm::Value* data = s_Builder.CreateAlloca(s_Builder.getInt8PtrTy(), nullptr, "data");
 	llvm::Value* ptr = s_Builder.CreateAlloca(s_Builder.getInt8PtrTy(), nullptr, "ptr");
+	llvm::Value* flag = s_Builder.CreateAlloca(s_Builder.getInt1Ty(), nullptr, "flag");
 
 	std::clog << "[LOG] Getting standard calloc function...\n";
 	llvm::Function* calloc_func = llvm::cast<llvm::Function>
 		(
 		 s_Module->getOrInsertFunction("calloc", s_Builder.getInt8PtrTy(), s_Builder.getInt64Ty(), s_Builder.getInt64Ty(), nullptr)
+		);
+
+	std::clog << "[LOG] Getting standard putchar function...\n";
+	llvm::Function* putchar_func = llvm::cast<llvm::Function>
+		(
+		 s_Module->getOrInsertFunction("putchar", s_Builder.getInt32Ty(), s_Builder.getInt32Ty(), nullptr)
+		);
+	std::clog << "[LOG] Getting standard getchar function...\n";
+	llvm::Function* getchar_func = llvm::cast<llvm::Function>
+		(
+		 s_Module->getOrInsertFunction("getchar", s_Builder.getInt32Ty(), nullptr)
 		);
 
 	std::clog << "[LOG] Allocating data pointer...(with calloc)\n";
@@ -55,15 +78,71 @@ int main()
 	s_Builder.CreateStore(data_ptr, data);
 	s_Builder.CreateStore(data_ptr, ptr);
 
-	llvm::Function* funcPutChar = llvm::cast<llvm::Function>(
-			s_Module->getOrInsertFunction("putchar",
-				s_Builder.getInt32Ty(),
-				s_Builder.getInt32Ty(),
-				nullptr));
-	s_Builder.CreateCall(
-			funcPutChar,
-			{s_Builder.getInt32(65)}
-			);
+	std::size_t cond_num = 0;
+	for(char ch : code)
+	{
+		std::string cond_num_str = std::to_string(cond_num);
+		switch(ch)
+		{
+			case 'a':
+				s_Builder.CreateStore(s_Builder.CreateNot(flag), flag);
+				break;
+			case 's':
+				{
+				llvm::BasicBlock* cond_true = llvm::BasicBlock::Create(s_Context, "cond_true" + cond_num_str, main_func);
+				llvm::BasicBlock* cond_false = llvm::BasicBlock::Create(s_Context, "cond_false" + cond_num_str, main_func);
+				llvm::BasicBlock* cond_end = llvm::BasicBlock::Create(s_Context, "cond_end" + cond_num_str, main_func);
+
+				llvm::Value* flag_cmp = s_Builder.CreateICmpEQ(s_Builder.CreateLoad(flag), s_Builder.getInt1(true), "branch" + cond_num_str);
+				s_Builder.CreateCondBr(flag_cmp, cond_true, cond_false);
+				s_Builder.SetInsertPoint(cond_true);
+				s_Builder.CreateStore(s_Builder.CreateInBoundsGEP(s_Builder.getInt8Ty(), s_Builder.CreateLoad(ptr), s_Builder.getInt32(1)), ptr);
+				s_Builder.SetInsertPoint(cond_false);
+				s_Builder.CreateStore(s_Builder.CreateInBoundsGEP(s_Builder.getInt8Ty(), s_Builder.CreateLoad(ptr), s_Builder.getInt32(1)), ptr);
+				s_Builder.SetInsertPoint(cond_end);
+				cond_num++;
+				}
+				break;
+			case 'd':
+				{
+				llvm::BasicBlock* cond = llvm::BasicBlock::Create(s_Context, "cond" + cond_num_str, main_func);
+				llvm::BasicBlock* cond_true = llvm::BasicBlock::Create(s_Context, "cond_true" + cond_num_str, main_func);
+				llvm::BasicBlock* cond_false = llvm::BasicBlock::Create(s_Context, "cond_false" + cond_num_str, main_func);
+				llvm::BasicBlock* cond_end = llvm::BasicBlock::Create(s_Context, "cond_end" + cond_num_str, main_func);
+				llvm::Value* tmp_ptr = s_Builder.CreateLoad(ptr);
+
+				s_Builder.CreateBr(cond);
+				s_Builder.SetInsertPoint(cond);
+				llvm::Value* flag_cmp = s_Builder.CreateICmpEQ(s_Builder.CreateLoad(flag), s_Builder.getInt1(true), "branch" + cond_num_str);
+				s_Builder.CreateCondBr(flag_cmp, cond_true, cond_false);
+				s_Builder.SetInsertPoint(cond_true);
+				s_Builder.CreateStore(s_Builder.CreateAdd(s_Builder.CreateLoad(tmp_ptr), s_Builder.getInt8(1)), tmp_ptr);
+				s_Builder.CreateBr(cond_end);
+				s_Builder.SetInsertPoint(cond_false);
+				s_Builder.CreateStore(s_Builder.CreateAdd(s_Builder.CreateLoad(tmp_ptr), s_Builder.getInt8(-1)), tmp_ptr);
+				s_Builder.CreateBr(cond_end);
+				s_Builder.SetInsertPoint(cond_end);
+				cond_num++;
+				}
+				break;
+			case 'f':
+				{
+				llvm::BasicBlock* cond_true = llvm::BasicBlock::Create(s_Context, "cond_true" + cond_num_str, main_func);
+				llvm::BasicBlock* cond_false = llvm::BasicBlock::Create(s_Context, "cond_false" + cond_num_str, main_func);
+				llvm::BasicBlock* cond_end = llvm::BasicBlock::Create(s_Context, "cond_end" + cond_num_str, main_func);
+
+				llvm::Value* flag_cmp = s_Builder.CreateICmpEQ(s_Builder.CreateLoad(flag), s_Builder.getInt1(true), "branch" + cond_num_str);
+				s_Builder.CreateCondBr(flag_cmp, cond_true, cond_false);
+				s_Builder.SetInsertPoint(cond_true);
+				s_Builder.CreateCall(putchar_func, s_Builder.CreateSExt(s_Builder.CreateLoad(s_Builder.CreateLoad(ptr)), s_Builder.getInt32Ty()));
+				s_Builder.SetInsertPoint(cond_false);
+				s_Builder.CreateCall(s_Builder.CreateTrunc(s_Builder.CreateCall(getchar_func), s_Builder.getInt8Ty()), s_Builder.CreateLoad(ptr));
+				s_Builder.SetInsertPoint(cond_end);
+				cond_num++;
+				}
+				break;
+		}
+	}
 
 	std::clog << "[LOG] Getting standard free function...\n";
 	llvm::Function* free_func = llvm::cast<llvm::Function>(
@@ -76,51 +155,11 @@ int main()
 	std::clog << "[LOG] Returning zero from main entry function...\n";
   	s_Builder.CreateRet(s_Builder.getInt32(0));
 
-/////////////////////////////////////////////////////////////////////////////
-	/*llvm::InitializeAllTargetInfos();
-	llvm::InitializeAllTargets();
-	llvm::InitializeAllTargetMCs();
-	llvm::InitializeAllAsmParsers();
-	llvm::InitializeAllAsmPrinters();
 
-	std::string TargetTriple = llvm::sys::getDefaultTargetTriple();
-
-	std::string err;
-	const llvm::Target* Target = llvm::TargetRegistry::lookupTarget(TargetTriple, err);
-	if (!Target) {
-		std::cerr << "Failed to lookup target " + TargetTriple + ": " + err;
-		return 1;
-	}
-
-	llvm::TargetOptions opt;
-	auto RM = llvm::Optional<llvm::Reloc::Model>();
-	llvm::TargetMachine* TheTargetMachine = Target->createTargetMachine(TargetTriple, "generic", "", opt, RM.getValueOr(llvm::Reloc::Model()));
-
-	s_Module->setTargetTriple(TargetTriple);
-	s_Module->setDataLayout(TheTargetMachine->createDataLayout());
-
-	std::string Filename = "output.o";
-	std::error_code err_code;
-	llvm::raw_fd_ostream dest(Filename, err_code, llvm::sys::fs::F_None);
-	if (err_code) {
-		std::cerr << "Could not open file: " << err_code.message();
-		return 1;
-	}
-
-	llvm::legacy::PassManager pass;
-	if (TheTargetMachine->addPassesToEmitFile(pass, dest, llvm::TargetMachine::CGFT_ObjectFile)) {
-		std::cerr << "TheTargetMachine can't emit a file of this type\n";
-		return 1;
-	}
-	pass.run(*s_Module);
-	dest.flush();
-	std::cout << "Wrote " << Filename << "\n";*/
-
-	std::error_code err_code;
-	llvm::raw_fd_ostream output("output.ll", err_code, llvm::sys::fs::F_None);
-
+	std::clog << "[LOG] Writing LLVM IR to output.ll...\n";
+	std::error_code err_code; llvm::raw_fd_ostream output("output.ll", err_code, llvm::sys::fs::F_None); 
 	s_Module->print(output, nullptr);
-
+	
 	std::clog << "[LOG] Finished\n";
 	return 0;
 }
