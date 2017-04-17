@@ -62,7 +62,7 @@ It prints asdfJIT\n, and that's what we did in REPL. But one thing different is 
 
 We did not satisfy with result of REPL llvm ir output, which was 1500-line-lengths.
 
-But we're lucky enough to have ability to optimize what code. Even more, we can do it in second. Just type `make opt`. 
+But we're lucky enough to have ability to optimize that evil code. Even more, we can do it in a second. Just type `make opt`. 
 
 This uses llvm opt tool with -O3 option, and goes thorugh same steps that we did above to generate executable. It would generate `optimised_output.ll, optimised_output.o, optimised_output`.
 
